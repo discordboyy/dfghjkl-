@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strømpris i Oslo</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      color: #17202a;
+    }
+
+    header {
+      background: #111827;
+      color: white;
+      padding: 24px 20px;
+      text-align: center;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+
+    header p {
+      margin: 0;
+      color: #cbd5e1;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 0 20px;
+    }
+
+    .info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .date {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    select {
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: white;
+      font-size: 16px;
+    }
+
+    .prices {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .price {
+      background: white;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      border-left: 5px solid #22c55e;
+    }
+
+    .price.expensive {
+      border-left-color: #ef4444;
+    }
+
+    .price.medium {
+      border-left-color: #f59e0b;
+    }
+
+    .hour {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    .value {
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    .unit {
+      color: #64748b;
+      font-size: 13px;
+    }
+
+    .loading,
+    .error {
+      background: white;
+      padding: 30px;
+      text-align: center;
+      border-radius: 12px;
+    }
+
+    .error {
+      color: #b91c1c;
+    }
+
+    footer {
+      text-align: center;
+      color: #64748b;
+      font-size: 14px;
+      padding: 30px 20px;
+    }
+
+    footer a {
+      color: inherit;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>⚡ Strømpris</h1>
+  <p>Timepris i Norge</p>
+</header>
+
+<main>
+
+  <div class="info">
+    <div class="date" id="date">Laster...</div>
+
+    <select id="area">
+      <option value="NO1">NO1 – Oslo / Øst-Norge</option>
+      <option value="NO2">NO2 – Kristiansand / Sør-Norge</option>
+      <option value="NO3">NO3 – Trondheim / Midt-Norge</option>
+      <option value="NO4">NO4 – Tromsø / Nord-Norge</option>
+      <option value="NO5">NO5 – Bergen / Vest-Norge</option>
+    </select>
+  </div>
+
+  <div id="content">
+    <div class="loading">
+      Laster strømpriser...
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  Strømpriser levert av
+  <a href="https://www.hvakosterstrommen.no" target="_blank">
+    Hva koster strømmen.no
+  </a>
+</footer>
+
+
+<script>
+  const areaSelect = document.getElementById("area");
+  const content = document.getElementById("content");
+  const dateElement = document.getElementById("date");
+
+  function getToday() {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    return {
+      year,
+      month,
+      day
+    };
+  }
+
+  async function loadPrices() {
+    const area = areaSelect.value;
+    const date = getToday();
+
+    const url =
+      `https://www.hvakosterstrommen.no/api/v1/prices/` +
+      `${date.year}/${date.month}-${date.day}_${area}.json`;
+
+    content.innerHTML = `
+      <div class="loading">
+        Laster strømpriser...
+      </div>
+    `;
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error("Kunne ikke hente strømpriser");
+      }
+
+      const prices = await response.json();
+
+      if (!prices.length) {
+        throw new Error("Ingen priser tilgjengelig");
+      }
+
+      showPrices(prices);
+
+    } catch (error) {
+      content.innerHTML = `
+        <div class="error">
+          Kunne ikke hente strømprisene.<br><br>
+          ${error.message}
+        </div>
+      `;
+    }
+  }
+
+  function showPrices(prices) {
+    const firstDate = new Date(prices[0].time_start);
+
+    dateElement.textContent =
+      firstDate.toLocaleDateString("no-NO", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      });
+
+    const average =
+      prices.reduce((sum, item) => sum + item.NOK_per_kWh, 0)
+      / prices.length;
+
+    content.innerHTML = `
+      <div class="prices">
+        ${prices.map(item => {
+
+          const start = new Date(item.time_start);
+          const end = new Date(item.time_end);
+
+          const price = item.NOK_per_kWh;
+
+          let className = "price";
+
+          if (price > average * 1.3) {
+            className += " expensive";
+          } else if (price > average) {
+            className += " medium";
+          }
+
+          return `
+            <div class="${className}">
+              <div class="hour">
+                ${start.toLocaleTimeString("no-NO", {
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+                –
+                ${end.toLocaleTimeString("no-NO", {
+                  hour: "2-digit",
+                  minute: "2-digit"
+                })}
+              </div>
+
+              <div class="value">
+                ${price.toFixed(2)} kr
+              </div>
+
+              <div class="unit">
+                per kWh eks. mva.
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  }
+
+  areaSelect.addEventListener("change", loadPrices);
+
+  loadPrices();
+</script>
+
+</body>
+</html>
